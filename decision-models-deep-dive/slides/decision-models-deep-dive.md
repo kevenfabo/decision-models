@@ -281,7 +281,7 @@ Self-Distillation (model's own post-reasoning distribution → first answer toke
 - **SII-Decision 4B / 27B** — open, Qwen decoders
 - **Laya** — open, Apache-2.0, ModernBERT encoder, self-hostable, fine-tunable
 - **SearchJev** — open, specialised for search-agent decisions
-- **Torchcast Decision** — 4B/12B/27B family *(what today's demo runs)*
+- **Torchcast Decision** — 4B/12B/27B family *(CUDA-only — not usable on today's Apple Silicon demo machine, see Live Demo)*
 
 On **JEVal** (11k instances, 36 datasets): best open model **matches** Jev
 — SII-Decision-27B **79.2%** vs Jev **78.4%** — most open models trail.
@@ -497,11 +497,30 @@ monitoring [A p.14]. Realistic route for regulated decisions: self-hosted open o
 
 | | Open-source default (today) | Hosted alternative (drop-in later) |
 |---|---|---|
-| Decision model | Torchcast Decision 4B, local | TypeSafe Jev (`jev-latest`) via API |
+| Decision model | **Laya** (ModernBERT, 421M), local, MPS | TypeSafe Jev (`jev-latest`) via API |
 | LLM contrast | Ollama, local (`qwen3.6`) | OpenAI or Claude via API |
 
 Default path: no API keys, no internet — everything runs on-machine.
 Switching providers is a one-line change in the notebook's Config cell.
+
+*Torchcast Decision 4B was the original plan — its own docs confirm it requires a CUDA-only serving stack for correct results, with no legitimate CPU/MPS path. Laya is a standard ModernBERT encoder with documented MPS support, so it's the one actually running today.*
+
+---
+
+<!-- _class: dense -->
+
+## Eval appendix, run on this laptop: news sentiment
+
+100 sampled Financial PhraseBank sentences, Laya vs. Ollama/qwen3.6, full methodology in `eval/decision_model_eval.ipynb`:
+
+| | Accuracy | Macro F1 | Brier | Latency p50 | Latency p95 |
+|---|---|---|---|---|---|
+| **Laya** | **92%** | **0.911** | **0.118** | **43 ms** | **50 ms** |
+| Ollama (qwen3.6) | 85% | 0.863 | 0.253 | 1077 ms | 1242 ms |
+
+Laya wins every axis measured: more accurate, ~half the Brier score, **~25x faster** with far tighter tail latency.
+
+*Caveat: 100 samples on one task is a signal, not a certified benchmark — and this pits a specialized decision model against an LLM used off-label, which is exactly the real-world comparison teams actually make.*
 
 ---
 

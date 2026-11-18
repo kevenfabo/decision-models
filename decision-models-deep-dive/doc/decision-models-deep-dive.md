@@ -105,6 +105,24 @@ We sit in risk management at a bank, and three threads of our actual work connec
 
 None of this argues against piloting decision models here — if anything, typed, thresholdable, composable output is a better fit for model-risk governance than free-text LLM output ever was. It argues for evaluating them with the same rigor we'd apply to any new scoring model before it touches a regulated decision.
 
+## 7. Evaluation appendix: news sentiment, measured
+
+Everything above is motivation and literature. This section is a measurement, run locally on this laptop against the Financial PhraseBank ground truth described in `eval/decision_model_eval.ipynb` — 100 randomly sampled, analyst-labeled financial news sentences, comparing **Laya** (a ModernBERT-based open decision model, self-hosted via MPS) against **Ollama/`qwen3.6`** prompted for JSON classification.
+
+| Provider | Accuracy | Macro F1 | Brier score | Latency p50 | Latency p95 | Est. cost / 1k |
+|---|---|---|---|---|---|---|
+| **Laya** (decision model) | **92%** | **0.911** | **0.118** | **43ms** | **50ms** | $0 (self-hosted) |
+| Ollama/qwen3.6 (LLM) | 85% | 0.863 | 0.253 | 1077ms | 1242ms | $0 (self-hosted) |
+
+On this task, Laya wins on every axis measured: more accurate, roughly half the Brier score (better calibrated), and about 25x faster at both the median and the 95th percentile — with far tighter latency variance (p95 barely above p50, versus a wide spread for the LLM). The reliability diagram backs up the calibration gap directly: Laya's curve sits closer to the diagonal across most of the confidence range than Ollama's.
+
+**Caveats, stated plainly:**
+- 100 samples on one task is a signal, not a certified benchmark — treat this as "worth a real pilot," not "proven."
+- This compares a *specialized decision model* against a *general-purpose LLM used off-label* for a classification task. It is not a fair fight by design — it's the fight that actually exists in most real deployment decisions ("do we build a dedicated classifier or just re-use the LLM we already have"), which is why it's the one worth running.
+- A finding from the eval notebook's build process, not the benchmark itself: running Laya and Ollama concurrently on a single machine caused intermittent `MPS OutOfMemoryError`s on the decision-model side — real evidence that self-hosting multiple models on shared hardware needs capacity planning, not just a "it'll probably fit" assumption.
+
+Full methodology, the raw per-sample results, and both figures (`figures/latency_comparison.png`, `figures/calibration_reliability.png`) are in `eval/decision_model_eval.ipynb`.
+
 ## Sources
 
 **Primary research (via internal corpus, not independently re-verified by this doc's author):**
