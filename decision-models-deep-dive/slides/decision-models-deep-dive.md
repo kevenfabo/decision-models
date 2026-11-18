@@ -507,20 +507,87 @@ Switching providers is a one-line change in the notebook's Config cell.
 
 ---
 
+## Evaluation — does this actually hold up on our kind of task?
+
+Everything so far is motivation and literature. This section is a **measurement**,
+run live on this laptop, full methodology in `eval/decision_model_eval.ipynb`.
+
+**The question it answers:** when a team already has an LLM available, is it worth
+standing up a dedicated decision model — or just re-use the LLM for classification too?
+That's the real choice most teams face, not an abstract architecture comparison.
+
+<!--
+This is the actual deployment decision, not a strawman: "do we build/run a dedicated
+classifier or just re-use the LLM we already have" -- framed deliberately as the fight
+that exists in practice.
+-->
+
+---
+
+## Context & data
+
+**Use case:** financial news sentiment (negative / neutral / positive) — a direct
+stand-in for the fast, calibrated, typed classification risk teams run at volume.
+
+**Ground truth:** [Financial PhraseBank](https://huggingface.co/datasets/takala/financial_phrasebank)
+(Malo et al., 2014) — `Sentences_AllAgree`: 2,264 analyst-labeled financial news
+sentences, **100% annotator agreement**. CC BY-NC-SA 3.0 (research/education use).
+
+**Sample:** 100 sentences, seed=7, drawn fresh at eval time (not committed to the repo).
+
+**Compared:** **Laya** (ModernBERT-421M, self-hosted, MPS) vs. **Ollama/`qwen3.6`**
+prompted for JSON — the same pluggable-provider pattern as the live demo.
+
+<!-- Why Financial PhraseBank: domain fit (financial news) + rigor (100% agreement subset) + no custom labeling needed. -->
+
+---
+
 <!-- _class: dense -->
 
-## Eval appendix, run on this laptop: news sentiment
+## Metrics — four angles, not one
 
-100 sampled Financial PhraseBank sentences, Laya vs. Ollama/qwen3.6, full methodology in `eval/decision_model_eval.ipynb`:
+| Metric | What it measures | Why it's here |
+|---|---|---|
+| **Accuracy / Macro F1** | Did it get the label right | The obvious one, but not sufficient alone |
+| **Brier score** | Was the *probability* honest, not just the label | Directly tests Part 4's calibration claim empirically |
+| **Latency p50 / p95** | Full distribution, not one anecdote | A single timed call (the live demo) can mislead; tails matter in production |
+| **Est. cost / 1k decisions** | $ at volume | Both ran self-hosted here ($0) — this matters once either side moves to a hosted API |
+
+Same four angles the corpus's own "how to benchmark one fairly" checklist recommends — see the backup appendix.
+
+---
+
+## Results
+
+100 Financial PhraseBank sentences, 100/100 completed on both sides, zero failures:
 
 | | Accuracy | Macro F1 | Brier | Latency p50 | Latency p95 |
 |---|---|---|---|---|---|
 | **Laya** | **92%** | **0.911** | **0.118** | **43 ms** | **50 ms** |
 | Ollama (qwen3.6) | 85% | 0.863 | 0.253 | 1077 ms | 1242 ms |
 
-Laya wins every axis measured: more accurate, ~half the Brier score, **~25x faster** with far tighter tail latency.
+Laya wins every axis measured: more accurate, **~half the Brier score** (meaningfully
+better calibrated), and **~25x faster** at both p50 and p95 — with far tighter tail
+latency (p95 barely above p50, vs. a wide spread for the LLM).
 
-*Caveat: 100 samples on one task is a signal, not a certified benchmark — and this pits a specialized decision model against an LLM used off-label, which is exactly the real-world comparison teams actually make.*
+The reliability diagram (`figures/calibration_reliability.png`) backs the calibration
+gap directly: Laya's curve sits closer to the diagonal across most of the confidence range.
+
+---
+
+## Conclusion
+
+- On **this task**, the dedicated decision model beat the general-purpose LLM used
+  off-label on every axis — accuracy, calibration, and latency, not just speed.
+- **Caveat 1:** 100 samples on one task is a signal, not a certified benchmark —
+  treat this as "worth a real pilot," not "proven."
+- **Caveat 2:** this isn't a fair fight by design, and that's the point — it's the
+  comparison teams actually make when deciding whether to stand up a dedicated model.
+- **A finding from building this, not the benchmark itself:** running Laya and Ollama
+  concurrently caused intermittent `MPS OutOfMemoryError`s on shared hardware — real
+  evidence that self-hosting multiple models needs capacity planning, not assumption.
+- **Next step:** the shadow-mode pilot from Part 6 — run this alongside production
+  judging, don't act on it yet, measure on our own data before setting any threshold.
 
 ---
 
