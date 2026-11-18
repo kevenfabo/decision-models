@@ -16,37 +16,27 @@ Team Engineering & Research Initiative — Edition #1
 <!--
 Welcome / framing: this is edition #1 of a new recurring team session.
 Note up front: "Jev" = TypeSafe AI's System 1 model, not JEPA.
+
+TOTAL ESTIMATE after the 2026-11-18 trim pass: ~60-65 min (30 presented slides +
+live demo execution + open discussion). Originally approved budget was 45-60 min;
+the gap is the corpus fact-check depth, governance section, and the eval section
+added since approval -- all explicitly requested, kept intentionally rather than cut.
+8 slides moved to the backup appendix (not presented) preserve everything trimmed
+from the main flow for Q&A. If still running long: cut "Why RL, and not just
+supervised training?" (243) and/or cap Discussion at ~3 min.
 -->
 
 ---
 
 ## A quick terminology note
 
-- **Jev** = TypeSafe AI's proprietary **System 1 model**, released 2026-09-15
-- Not JEPA (Joint Embedding Predictive Architecture) — different thing entirely
+- **Jev** = TypeSafe AI's proprietary **System 1 model**, released 2026-09-15 by founder **Diogo Almeida** (ex-OpenAI, InstructGPT co-author) — named after the Jevons paradox, not JEPA
 - Jev itself: closed, API-only, no published weights, no paper
 - Today's demo runs on the **open** ecosystem that grew up around the same idea
 
 <!--
 One sentence, don't dwell — just prevents confusion for the rest of the deck.
--->
-
----
-
-## Who's behind Jev
-
-**Diogo Almeida** — founder, TypeSafe AI
-- Ex-OpenAI: worked on the instruction-following methods behind ChatGPT; co-author of **InstructGPT**
-- Driving question: *"Models have been superhuman at chat for years, so where is all the automation?"*
-- Two years in stealth → launch 2026-09-15, **$40M seed**
-
-**The name:** after **William Stanley Jevons** — the Jevons paradox.
-*"Every order of magnitude drop in the cost of intelligence unlocks orders of magnitude more use cases."*
-
-<!--
-Sources: launch post [G p.166, p.175]; $40M [F p.144]; InstructGPT author list [A p.19].
-TypeSafe's docs say he "co-invented RLHF" [H p.178] — vendor framing; RLHF predates InstructGPT
-(Christiano et al. 2017). Safe phrasing: "part of the team that applied RLHF to InstructGPT/ChatGPT".
+Full founder bio moved to backup appendix.
 -->
 
 ---
@@ -121,31 +111,6 @@ SII-Decision-4B ~60 ms on H100 [C p.62]. Hosted numbers include the network hop.
 
 ---
 
-<!-- _class: dense -->
-
-## Isn't that just a classifier?
-
-Structurally, yes: closed output space, one pass, a softmax. The difference is the **interface**.
-
-| | Classical classifier (LogReg / GBM / fine-tuned BERT) | Decision model |
-|---|---|---|
-| Label set | Fixed at training time | **Declared per request**, read from descriptions |
-| Input | Features, or text for *one* task | Any text/JSON state + instructions |
-| New task | Retrain | Write a new question schema |
-| Questions per call | One | Many, **isolated**, over one shared state |
-| Output used as | Argmax label | The **distribution** — threshold, route, defer |
-
-**A classifier whose label set is an argument.**
-
-*Honest caveat: with enough labels and a stable taxonomy, a task-specific classifier is often still the most accurate.*
-
-<!--
-Three defining properties from the evidence audit [A p.2]. Caveat: [I p.183], [A p.13 item B3].
-Lineage: NLI zero-shot classifiers, GLiClass [C p.49].
--->
-
----
-
 ## Part 3 — Architecture, vs. traditional LLM
 
 **Traditional decoder-only LLM**
@@ -155,7 +120,7 @@ input tokens → transformer stack → next-token distribution
 
 The output *is* a token sequence. "Deciding" is coaxed out of it via prompting.
 
-<!-- 9-10 min for this section (now 13-15 with the added slides) -->
+<!-- ~11-12 min for this section (6 slides) -->
 
 ---
 
@@ -234,47 +199,6 @@ yes/no name swaps [A p.4].
 
 ---
 
-<!-- _class: dense -->
-
-## Two reference designs
-
-**(a) First-token decision readout** — decoder (SII-Decision, SearchJev)
-```
-"State … Instruction … (A) … (B) … (C) …  The correct answer is ("
-                                        one prefill │ logits at this position
-               softmax restricted to {A,B,C} label tokens → p(option)
-  Choice = argmax · Noul = p(true) · Score = Σ v_k · p(k)   (expected level)
-```
-
-**(b) Prefix tree + block attention mask** — encoder (Softplan NDM)
-```
-State ─┬─ Q1 Choice ─┬─ O11     siblings share logical positions and
-       │             └─ O12     attend only to themselves + ancestors
-       ├─ Q2 Score ── levels    → one sequence, one encoder pass
-       └─ Q3 Noul               → set head compares options (permutation-equivariant)
-```
-(b) guarantees **option-order invariance** and **question isolation** by construction — provable, testable.
-
-<!--
-[C p.60-61]: no new params — output-embedding rows of label tokens are the head; + Reasoning-to-Readout
-Self-Distillation (model's own post-reasoning distribution → first answer token, no gold labels).
-[I p.185-189]: Props 1-3; 6.4M new params on 110M body; explicit "none of these" for abstention.
--->
-
----
-
-## Side by side
-
-| | Traditional LLM | Decision model |
-|---|---|---|
-| Output | Token sequence | Typed value + probability |
-| Inference | Autoregressive decode loop | Single parallel pass |
-| Latency | Seconds, scales with output | 35 ms – 0.5 s, no "response length" |
-| Backbone | Purpose-trained/fine-tuned decoder | Existing pretrained encoder or decoder + new readout |
-| Consumer of output | A human reading prose | Code thresholding a probability |
-
----
-
 ## The landscape
 
 - **Jev** (TypeSafe) — proprietary, API-only (`POST /v1/systemone`, `jev-latest`)
@@ -302,7 +226,7 @@ Torchcast numbers come from its own GitHub page, not from the corpus.
 
 Both stages optimize for producing good **text**.
 
-<!-- 6-7 min (8-9 with the foundations slide) -->
+<!-- ~7-8 min for this section (4 slides; ancestor-lineage table moved to backup) -->
 
 ---
 
@@ -324,27 +248,16 @@ Laya documents Brier training explicitly [B p.41].
 
 ---
 
-<!-- _class: dense -->
+## Why RL, and not just supervised training?
 
-## Where the ideas come from
-
-Almost every component has an ancestor — the novelty is the **combination**.
-
-| Component | Ancestor |
-|---|---|
-| Score labels by LM probability | Cloze / verbalizer classification (PET, LM-BFF), GPT-3 likelihood scoring |
-| Guaranteed-valid output | Grammar-constrained decoding |
-| Runtime labels | NLI zero-shot classifiers, GLiClass |
-| Confidence-based escalation | Reject option, learning to defer, LLM cascades (FrugalGPT) |
-| Calibration | Proper scoring rules, temperature scaling |
-
-**Why RL and supervised meet:** with reward r = c − p, the expected REINFORCE gradient is
-**exactly −½ ∇ Brier**. Known labels → plain proper-scoring loss, same optimum, no sampling variance.
-A 0/1 accuracy reward (RLVR-style) → **overconfidence**.
+With reward r = c − p, the expected REINFORCE gradient is **exactly −½ ∇ Brier**.
+Known labels → plain proper-scoring loss reaches the same optimum, no sampling variance.
+A 0/1 accuracy reward (RLVR-style) → **overconfidence** instead.
 
 <!--
-[A p.3 Table 1]. Gradient identity: E[r_a ∇log p_a] = Σ (c_a − p_a) ∇p_a = −½ ∇ Σ (p_a − c_a)²  [I p.194].
+Gradient identity: E[r_a ∇log p_a] = Σ (c_a − p_a) ∇p_a = −½ ∇ Σ (p_a − c_a)²  [I p.194].
 RL still useful when you only observe the outcome of the action taken (bandit feedback).
+Full "where the ideas come from" ancestor table moved to backup appendix.
 -->
 
 ---
@@ -377,7 +290,7 @@ median per-benchmark 0.168.
 - **Retrieval** — rerank or navigate documents (DecisionRAG: +13.8 R@1 over dense + 8B reranker)
 
 <!--
-4-5 min. DecisionRAG [E p.122].
+~5-6 min for this section (2 slides, incl. the "Reality check" evidence-audit slide). DecisionRAG [E p.122].
 -->
 
 ---
@@ -405,28 +318,6 @@ Audit = Tang & Zheng [A]. Findings 1-4 [A p.8-11]; name swap [A p.13]; JevOut 61
 
 ---
 
-## The pattern that makes it work: confidence-gated cascade
-
-```
-request ─▶ decision model ─▶ p ≥ τ ? ──yes──▶ act automatically
-                                  └──no───▶ strong LLM ─▶ still unsure? ─▶ human
-```
-
-- 8-way routing, keep only conf ≥ 0.90: **83.8% → 95.5%** accuracy at 70% coverage
-- Judge cascade: **92.5 vs 93.1** for GPT-6 alone, at **57% of the cost**
-- REFLEX agent: 95% success, **72.7% fewer** strong-model calls
-
-**Limits:** when the fallback shares the same errors, escalation recovers little
-(LLM judges repeated Jev's confident mistakes **96%** of the time) — and a cheap
-*generative* cascade is a serious baseline. Freeze τ before testing.
-
-<!--
-[F p.158] routing; [A p.11] judge cascade; [J p.236] REFLEX; [A p.12] 96% correlated errors;
-τ²-bench: generative cascade cheaper, no less accurate — authors withdrew superiority claim [J p.237].
--->
-
----
-
 ## Part 6 — Why it matters for us
 
 We're risk management at a bank. Three direct threads:
@@ -436,7 +327,7 @@ Full LLM-as-judge on every response is slow and expensive.
 → Decision-model-as-judge triages: auto-pass/fail the clear cases,
 reserve full judge scrutiny for the ambiguous ones.
 
-<!-- 6-8 min total for this section (8-10 with governance) -->
+<!-- ~6-7 min for this section (3 slides; the old prose-only risk&compliance slide and the governance table are now one merged dense slide) -->
 
 ---
 
@@ -450,21 +341,12 @@ a complementary fast-path signal alongside existing graph matching.
 
 ---
 
-## Why it matters for us (cont.)
-
-**Risk & compliance — specifically**
-Low-latency, calibrated, auditable decisioning isn't a side benefit here —
-it's the core job description.
-
-Decision models: a technically legible bridge between LLM-adjacent
-capabilities and the regulated, explainable scoring compliance already
-requires of us.
-
----
-
 <!-- _class: dense -->
 
-## Governance: what model risk will ask
+## Risk & compliance — specifically, what model risk will ask
+
+Low-latency, calibrated, auditable decisioning isn't a side benefit for this
+department — it's the core job description.
 
 | Concern | Hosted Jev | Self-hosted open / narrow model |
 |---|---|---|
@@ -507,38 +389,26 @@ Switching providers is a one-line change in the notebook's Config cell.
 
 ---
 
-## Evaluation — does this actually hold up on our kind of task?
+<!-- _class: dense -->
+
+## Evaluation — context & data
 
 Everything so far is motivation and literature. This section is a **measurement**,
 run live on this laptop, full methodology in `eval/decision_model_eval.ipynb`.
 
 **The question it answers:** when a team already has an LLM available, is it worth
 standing up a dedicated decision model — or just re-use the LLM for classification too?
-That's the real choice most teams face, not an abstract architecture comparison.
+
+**Use case:** financial news sentiment (negative / neutral / positive).
+**Ground truth:** [Financial PhraseBank](https://huggingface.co/datasets/takala/financial_phrasebank)
+(Malo et al., 2014) — `Sentences_AllAgree`, 2,264 sentences, **100% annotator agreement**, CC BY-NC-SA 3.0.
+**Sample:** 100 sentences, seed=7. **Compared:** **Laya** (ModernBERT-421M, MPS) vs. **Ollama/`qwen3.6`**.
 
 <!--
-This is the actual deployment decision, not a strawman: "do we build/run a dedicated
-classifier or just re-use the LLM we already have" -- framed deliberately as the fight
-that exists in practice.
+Real deployment decision, not a strawman: "build/run a dedicated classifier or reuse the LLM we have."
+Why Financial PhraseBank: domain fit + 100%-agreement rigor + no custom labeling needed.
+~8-9 min for the Evaluation section (4 slides: this one, Metrics, Results, Conclusion).
 -->
-
----
-
-## Context & data
-
-**Use case:** financial news sentiment (negative / neutral / positive) — a direct
-stand-in for the fast, calibrated, typed classification risk teams run at volume.
-
-**Ground truth:** [Financial PhraseBank](https://huggingface.co/datasets/takala/financial_phrasebank)
-(Malo et al., 2014) — `Sentences_AllAgree`: 2,264 analyst-labeled financial news
-sentences, **100% annotator agreement**. CC BY-NC-SA 3.0 (research/education use).
-
-**Sample:** 100 sentences, seed=7, drawn fresh at eval time (not committed to the repo).
-
-**Compared:** **Laya** (ModernBERT-421M, self-hosted, MPS) vs. **Ollama/`qwen3.6`**
-prompted for JSON — the same pluggable-provider pattern as the live demo.
-
-<!-- Why Financial PhraseBank: domain fit (financial news) + rigor (100% agreement subset) + no custom labeling needed. -->
 
 ---
 
@@ -623,6 +493,124 @@ Where in **our** stack could a decision model replace:
 
 # Appendix
 ### Backup Q&A — not presented
+
+---
+
+<!-- _class: backup -->
+
+## Who's behind Jev
+
+**Diogo Almeida** — founder, TypeSafe AI
+- Ex-OpenAI: worked on the instruction-following methods behind ChatGPT; co-author of **InstructGPT**
+- Driving question: *"Models have been superhuman at chat for years, so where is all the automation?"*
+- Two years in stealth → launch 2026-09-15, **$40M seed**
+
+**The name:** after **William Stanley Jevons** — the Jevons paradox.
+*"Every order of magnitude drop in the cost of intelligence unlocks orders of magnitude more use cases."*
+
+<!--
+Sources: launch post [G p.166, p.175]; $40M [F p.144]; InstructGPT author list [A p.19].
+TypeSafe's docs say he "co-invented RLHF" [H p.178] — vendor framing; RLHF predates InstructGPT
+(Christiano et al. 2017). Safe phrasing: "part of the team that applied RLHF to InstructGPT/ChatGPT".
+-->
+
+---
+
+<!-- _class: backup -->
+
+## Isn't that just a classifier?
+
+Structurally, yes: closed output space, one pass, a softmax. The difference is the **interface**.
+
+| | Classical classifier (LogReg / GBM / fine-tuned BERT) | Decision model |
+|---|---|---|
+| Label set | Fixed at training time | **Declared per request**, read from descriptions |
+| Input | Features, or text for *one* task | Any text/JSON state + instructions |
+| New task | Retrain | Write a new question schema |
+| Questions per call | One | Many, **isolated**, over one shared state |
+| Output used as | Argmax label | The **distribution** — threshold, route, defer |
+
+**A classifier whose label set is an argument.**
+
+*Honest caveat: with enough labels and a stable taxonomy, a task-specific classifier is often still the most accurate.*
+
+<!--
+Three defining properties from the evidence audit [A p.2]. Caveat: [I p.183], [A p.13 item B3].
+Lineage: NLI zero-shot classifiers, GLiClass [C p.49].
+-->
+
+---
+
+<!-- _class: backup -->
+
+## Two reference designs
+
+**(a) First-token decision readout** — decoder (SII-Decision, SearchJev)
+```
+"State … Instruction … (A) … (B) … (C) …  The correct answer is ("
+                                        one prefill │ logits at this position
+               softmax restricted to {A,B,C} label tokens → p(option)
+  Choice = argmax · Noul = p(true) · Score = Σ v_k · p(k)   (expected level)
+```
+
+**(b) Prefix tree + block attention mask** — encoder (Softplan NDM)
+```
+State ─┬─ Q1 Choice ─┬─ O11     siblings share logical positions and
+       │             └─ O12     attend only to themselves + ancestors
+       ├─ Q2 Score ── levels    → one sequence, one encoder pass
+       └─ Q3 Noul               → set head compares options (permutation-equivariant)
+```
+(b) guarantees **option-order invariance** and **question isolation** by construction — provable, testable.
+
+<!--
+[C p.60-61]: no new params — output-embedding rows of label tokens are the head; + Reasoning-to-Readout
+Self-Distillation (model's own post-reasoning distribution → first answer token, no gold labels).
+[I p.185-189]: Props 1-3; 6.4M new params on 110M body; explicit "none of these" for abstention.
+-->
+
+---
+
+<!-- _class: backup -->
+
+## Where the ideas come from
+
+Almost every component has an ancestor — the novelty is the **combination**.
+
+| Component | Ancestor |
+|---|---|
+| Score labels by LM probability | Cloze / verbalizer classification (PET, LM-BFF), GPT-3 likelihood scoring |
+| Guaranteed-valid output | Grammar-constrained decoding |
+| Runtime labels | NLI zero-shot classifiers, GLiClass |
+| Confidence-based escalation | Reject option, learning to defer, LLM cascades (FrugalGPT) |
+| Calibration | Proper scoring rules, temperature scaling |
+
+<!--
+[A p.3 Table 1].
+-->
+
+---
+
+<!-- _class: backup -->
+
+## The pattern that makes it work: confidence-gated cascade
+
+```
+request ─▶ decision model ─▶ p ≥ τ ? ──yes──▶ act automatically
+                                  └──no───▶ strong LLM ─▶ still unsure? ─▶ human
+```
+
+- 8-way routing, keep only conf ≥ 0.90: **83.8% → 95.5%** accuracy at 70% coverage
+- Judge cascade: **92.5 vs 93.1** for GPT-6 alone, at **57% of the cost**
+- REFLEX agent: 95% success, **72.7% fewer** strong-model calls
+
+**Limits:** when the fallback shares the same errors, escalation recovers little
+(LLM judges repeated Jev's confident mistakes **96%** of the time) — and a cheap
+*generative* cascade is a serious baseline. Freeze τ before testing.
+
+<!--
+[F p.158] routing; [A p.11] judge cascade; [J p.236] REFLEX; [A p.12] 96% correlated errors;
+τ²-bench: generative cascade cheaper, no less accurate — authors withdrew superiority claim [J p.237].
+-->
 
 ---
 
