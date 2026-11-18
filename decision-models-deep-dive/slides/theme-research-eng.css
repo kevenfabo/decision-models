@@ -125,3 +125,42 @@ section::after {
   bottom: 28px;
   right: 80px;
 }
+
+/* Denser slides (tables, diagrams) — opt in with <!-- _class: dense --> */
+section.dense {
+  font-size: 23px;
+  padding: 56px 72px;
+}
+
+section.dense h2 {
+  margin-bottom: 0.3em;
+}
+
+section.dense table {
+  font-size: 0.8em;
+}
+
+section.dense td, section.dense th {
+  padding: 5px 10px;
+}
+
+section.dense pre {
+  font-size: 0.72em;
+  line-height: 1.35;
+}
+
+section.dense ul, section.dense ol {
+  line-height: 1.4;
+}
+
+/* Appendix / backup slides — opt in with <!-- _class: backup --> */
+section.backup {
+  font-size: 22px;
+}
+
+section.backup h2::before {
+  content: 'BACKUP · ';
+  color: #4b5563;
+  font-size: 0.6em;
+  letter-spacing: 0.14em;
+}
