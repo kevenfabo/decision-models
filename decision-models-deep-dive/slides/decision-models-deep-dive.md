@@ -122,14 +122,18 @@ No decode loop — there was never a token sequence to decode.
 
 ## The detail worth sitting with
 
-**A decision model is usually not a new architecture family.**
+**Usually an existing pretrained backbone — not a new architecture family.**
+**But it can be an encoder *or* a decoder.**
 
-It's a fine-tune (often head-swapped) on an existing open LLM backbone:
+| | Decoder-based | Encoder-based |
+|---|---|---|
+| Examples | SII-Decision (Qwen), SearchJev | Laya (ModernBERT, 421M), Open-Jev (DeBERTa) |
+| How it reads the answer | Next-token softmax, restricted to option tokens | Marker/pooled token → small head |
+| New parameters | **Zero** — LM head rows *are* the decision head | A small added head |
+| Strength | Inherits backbone's world knowledge | Cheap, self-hostable, order-invariant by construction |
 
-- `xor` (Juspay) — post-trained **Qwen3.6-35B-A3B**
-- Torchcast Decision — **Qwen3.5-4B / Gemma-4-12B / Qwen3.8-27B**
-
-The innovation lives in the output stage + training objective — not a rethink of the transformer. Your existing LLM mental model transfers directly.
+A dedicated typed head vs. just reading the ordinary LM head: **.761 vs .761**
+in one matched study. The gain isn't the head — it's the training objective (Part 4).
 
 ---
 
@@ -139,19 +143,70 @@ The innovation lives in the output stage + training objective — not a rethink 
 |---|---|---|
 | Output | Token sequence | Typed value + calibrated probability |
 | Inference | Autoregressive decode loop | Single parallel pass |
-| Latency | Seconds, scales with output | 70–500ms, no "response length" |
-| Backbone | Purpose-trained/fine-tuned decoder | Usually a fine-tune/head-swap of one |
+| Latency | Seconds, scales with output | Hosted: 0.15-0.45s · Self-hosted: 30-60ms |
+| Backbone | Purpose-trained/fine-tuned decoder | Usually pretrained — encoder *or* decoder |
 | Consumer of output | A human reading prose | Code thresholding a probability |
 
 ---
 
 ## The landscape
 
-- **Jev** — proprietary, API-only (`POST /v1/systemone`, `jev-latest`)
+- **Jev** — proprietary, API-only (`POST /v1/systemone`, `jev-latest`), architecture undisclosed
 - **`xor`** (Juspay) — Apache-2.0, open weights, Hugging Face: `juspay/xor`
 - **Torchcast Decision** — 4B/12B/27B family, mixed Apache-2.0 / CC-BY-NC
 
-Open alternatives already **out-benchmark Jev** on community leaderboards.
+On the public JEVal benchmark: only **SII-Decision-27B** edges past Jev
+(79.2% vs 78.4%) — and is better calibrated (ECE 0.015 vs 0.053).
+Most open models score *below* Jev, some far below (Laya 26.3%).
+
+**Fair claim:** best open model ≈ matches Jev, better calibrated.
+**Not:** "open already wins." (`xor` / Torchcast aren't in the published literature yet.)
+
+---
+
+## Usage patterns: every call is state + typed questions
+
+Same `/v1/systemone` shape across **every** Jev-like model, any backbone:
+
+`state` (text/JSON) + one or more `questions`, each declaring an answer shape:
+
+- **Noul** — yes/no, calibrated probability pair `{yes: .., no: ..}`
+- **Choice** — fixed option set, probabilities sum to 1
+- **Score** — ordinal scale, full probability distribution across levels
+
+---
+
+## Usage patterns — where we already used them
+
+| Pattern | Our example |
+|---|---|
+| **Noul** | Entity resolution — "same entity: yes/no" |
+| **Noul** | Decision-model-as-judge — "pass the rubric: yes/no" |
+| **Choice** | News sentiment — negative / neutral / positive |
+| **Score** | *(not yet used)* — e.g. 1–5 risk severity, full distribution |
+
+One call can carry **up to 10 questions against the same state** —
+e.g. "escalate: yes/no" + "which team: billing/technical/other" together.
+Questions share the state but are answered **in isolation** from each other.
+
+Score detail: returns the *expected* level, not just argmax — can land
+between two levels. Trained so "high" vs. truth "critical" costs less
+than predicting "none": distance along the scale matters.
+
+<!-- ~2-3 min, folds into the existing architecture time budget -->
+
+---
+
+## Limitations — type-safe ≠ faithful
+
+- **Option framing changes answers, not confidence.** Swapping which name means "yes" moved one model's AUC .815 → .581 — zero type errors, still validly "an option."
+- **Calibration must be verified on your data.** Pooled ECE 0.047 hid a median *per-benchmark* ECE of 0.168. Wrong answers still carried mean confidence .778 in one study.
+- **Context can flip a correct answer.** Answer-preserving adversarial additions redirected 61% of initially-correct decisions.
+- **Hosted ≠ deterministic.** ~1% of answers changed on identical repeated hosted calls. Self-hosted + pinned weights can be made fully deterministic.
+
+**Always valid ≠ always correct.**
+
+<!-- ~3-4 min -->
 
 ---
 
@@ -176,6 +231,28 @@ Reward = **"was the probability actually well-calibrated against outcomes"**
 If the model says 0.8 confidence across 1,000 similar cases,
 ~800 of them should actually resolve true.
 
+*(TypeSafe hasn't published Jev's exact recipe — "RLCD" is their framing.
+What follows is the public proper-scoring-rule idea it's presented against.)*
+
+---
+
+## Why RL, when you could just train on labels?
+
+Reward r = c − p (correct indicator minus predicted probability).
+
+Expected RL gradient of r = **exactly half the negative gradient of the Brier score**
+— the standard proper-scoring loss.
+
+→ When you **know** the label: supervised training on a proper score
+reaches the *same* optimum, with less variance than RL.
+→ RL only earns its keep under **bandit feedback** — you see only the
+outcome of the action you took, not the label for every option.
+
+A plain 0/1 "was it correct" reward optimizes **accuracy**, not calibration
+— and produces **overconfidence**, the opposite of what a threshold needs.
+
+<!-- optional/appendix slide if time is tight -->
+
 ---
 
 ## Why this matters mechanically
@@ -195,7 +272,9 @@ Code can't "read between the lines" of a miscalibrated number.
 - A/B and multi-way routing
 - Replacing brittle "LLM returns JSON" classification
 - **Entity mapping/resolution** — match / no-match + calibrated probability
+  *(watch option cardinality: 77-label benchmark — 0.870 vs. 0.425 by model)*
 - **Decision-model-as-judge** — calibrated pass/fail instead of LLM-judge prose
+  *(as a reranker: BM25+decision model took R@1 33%→58%; LLM scoring tied 231/234 groups)*
 
 <!-- 4-5 min -->
 
@@ -209,6 +288,13 @@ We're risk management at a bank. Three direct threads:
 Full LLM-as-judge on every response is slow and expensive.
 → Decision-model-as-judge triages: auto-pass/fail the clear cases,
 reserve full judge scrutiny for the ambiguous ones.
+
+First pilot: **shadow mode** — run alongside the existing LLM-judge,
+don't act on it yet, measure calibration on our labels, fix a threshold.
+
+⚠ Caveat: an LLM fallback judge tends to **repeat the decision model's
+own mistakes** on its most-confident wrong answers (96% in one study) —
+escalation isn't automatically a safety net; measure the correlation.
 
 <!-- 6-8 min total for this section -->
 
@@ -227,12 +313,21 @@ a complementary fast-path signal alongside existing graph matching.
 ## Why it matters for us (cont.)
 
 **Risk & compliance — specifically**
-Low-latency, calibrated, auditable decisioning isn't a side benefit here —
-it's the core job description.
+Low-latency, calibrated, auditable decisioning is the core job description
+here, not a side benefit. But the fit cuts both ways:
 
-Decision models: a technically legible bridge between LLM-adjacent
-capabilities and the regulated, explainable scoring compliance already
-requires of us.
+- **No explanations** — a probability, not a reason. Auditability comes from
+  decomposing into atomic questions + a versioned rubric in *our* code.
+- **Hosted Jev is a governance-relevant black box** — undisclosed internals,
+  single region, ~1% nondeterminism. **Self-hosted** is the realistic route
+  for anything touching a regulated decision.
+- **Calibration drifts** — monitor per segment, not pooled; recalibrate on a schedule.
+- **Human review budgets work, but must be measured** — 0.8% review reached
+  90% precision in one case; per-field budgets ranged up to 72%.
+
+**Typed, thresholdable output is a better fit for model-risk governance
+than free-text LLM output — if evaluated with the same rigor as any
+new scoring model.**
 
 ---
 
@@ -269,11 +364,13 @@ Where in **our** stack could a decision model replace:
 
 ## Sources
 
-- sanity.io/glossary — *What is Jev?*
-- openrouter.ai/blog/insights — *What Is Jev?*
-- befailproof.ai/jev — *What is TypeSafe AI?*
+**Primary (arXiv):**
+- Tang & Zheng — *Typed Decision Models: An Early Evidence Audit*, 2609.32160
+- Duan, Lin, Wang, Xiang et al. — *General Decision Models (JEVal)*, 2610.03935
+- Antunes et al. — *Narrow Decision Models*, 2610.25553
+- dos Santos · Wu & Lim · Cao et al. · Wan, Jünger et al. — see written doc for full list
+
+**Vendor/secondary:**
+- sanity.io/glossary · openrouter.ai/blog/insights — *What is Jev?*
 - github.com/andyrewlee/awesome-system-one
-- layer3labs.io/guides — *Jev, Laya, and Open Alternatives*
-- huggingface.co/juspay/xor · github.com/juspay/neurolink
-- github.com/Torchcast-AI/torchcast-decision-4b
-- systemonemodels.org/models
+- huggingface.co/juspay/xor · github.com/Torchcast-AI/torchcast-decision-4b
