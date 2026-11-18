@@ -1,8 +1,10 @@
 ---
 marp: true
-theme: default
+theme: research-eng
 paginate: true
 size: 16:9
+header: 'DECISION MODELS — EDITION 01'
+footer: 'Team Engineering & Research Initiative · 2026-11-18'
 ---
 
 # Decision Models
@@ -241,6 +243,18 @@ requires of us.
 3. **Contrast** — same entity-resolution call via a generic LLM prompted for JSON, timed side by side
 
 *(Heavy setup pre-run before this session — live cells only.)*
+
+---
+
+## Live demo — pluggable providers
+
+| | Open-source default (today) | Hosted alternative (drop-in later) |
+|---|---|---|
+| Decision model | Torchcast Decision 4B, local | TypeSafe Jev (`jev-latest`) via API |
+| LLM contrast | Ollama, local (`qwen3.6`) | OpenAI or Claude via API |
+
+Default path: no API keys, no internet — everything runs on-machine.
+Switching providers is a one-line change in the notebook's Config cell.
 
 ---
 
