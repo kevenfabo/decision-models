@@ -1,1 +1,22 @@
+# Claude Code project config
 .claude/
+
+# OS cruft
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*-venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node (marp-cli etc.)
+node_modules/
+
+# Logs
+*.log
