@@ -218,17 +218,20 @@ regulated decisions: self-hosted open or narrow model. ~3 min.
 
 ---
 
-## Live demo
+## Demo (pre-run — not executed live on this machine)
 
-**Live:** entity resolution — two candidate records → match/no-match + probability,
-on **Laya** (ModernBERT, local, MPS). Torchcast Decision 4B was the original plan —
-its own docs require a CUDA-only stack with no Apple Silicon path.
+Three scenarios, all run ahead of time on **Laya** (ModernBERT, local, MPS) and
+saved with real output — walk through `demo/decision_model_demo.html`:
 
-**In the notebook, not re-run live today:** decision-model-as-judge (same model,
-swapped schema → RAG pass/fail), and the LLM contrast (same call via Ollama/qwen3.6,
-timed side by side) — both fully working in `demo/decision_model_demo.ipynb`.
+1. **Entity resolution** — two candidate records → 77% same-entity, 884ms
+2. **Decision-model-as-judge** — same model, swapped schema → 89% pass, 233ms
+3. **Contrast** — same call via Ollama/qwen3.6 → agrees (95%), but 2.2s
 
-<!-- ~2 min narration + ~2-3 min live execution. -->
+Torchcast Decision 4B was the original plan — its own docs require a CUDA-only
+stack with no Apple Silicon path, so this runs on Laya instead (backup appendix
+has the full explanation).
+
+<!-- ~2-3 min, walkthrough only -- no live execution, no network/server dependency. -->
 
 ---
 
