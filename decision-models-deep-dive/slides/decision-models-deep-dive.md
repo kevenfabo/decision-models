@@ -17,13 +17,14 @@ Team Engineering & Research Initiative — Edition #1
 Welcome / framing: this is edition #1 of a new recurring team session.
 Note up front: "Jev" = TypeSafe AI's System 1 model, not JEPA.
 
-TOTAL ESTIMATE after the 2026-11-18 trim pass: ~60-65 min (30 presented slides +
-live demo execution + open discussion). Originally approved budget was 45-60 min;
-the gap is the corpus fact-check depth, governance section, and the eval section
-added since approval -- all explicitly requested, kept intentionally rather than cut.
-8 slides moved to the backup appendix (not presented) preserve everything trimmed
-from the main flow for Q&A. If still running long: cut "Why RL, and not just
-supervised training?" (243) and/or cap Discussion at ~3 min.
+TOTAL ESTIMATE after the 2026-11-19 pass: ~62-67 min (31 presented slides + live
+demo execution + open discussion). Originally approved budget was 45-60 min; the
+gap is the corpus fact-check depth, governance section, eval section, and the
+Qwen3.5-4B worked example added since approval -- all explicitly requested, kept
+intentionally rather than cut. 8 slides moved to the backup appendix (not
+presented) preserve everything trimmed from the main flow for Q&A. If still
+running long: cut "Why RL, and not just supervised training?" and/or cap
+Discussion at ~3 min.
 -->
 
 ---
@@ -120,7 +121,7 @@ input tokens → transformer stack → next-token distribution
 
 The output *is* a token sequence. "Deciding" is coaxed out of it via prompting.
 
-<!-- ~11-12 min for this section (6 slides) -->
+<!-- ~13-14 min for this section (7 slides) -->
 
 ---
 
@@ -169,6 +170,27 @@ The innovation lives in the readout, request layout, and training objective.
 <!--
 [A p.4-5], [B p.40], [C p.61] (new head lowered accuracy by several points),
 [A p.8] Yu & Yao: typed head .761 = LM head .761. [K p.255].
+-->
+
+---
+
+<!-- _class: dense -->
+
+## The "how," worked through one example: Qwen3.5-4B → a decision model
+
+| Step | What changes | What doesn't |
+|---|---|---|
+| **1. Start** | — | Pretrained decoder LLM, untouched: same transformer, same weights |
+| **2. Readout trick** | How you *read* the output | Prompt ends right before the answer; restrict the next-token distribution to just the option-label tokens. One prefill, no decode loop. The label tokens' existing output-embedding rows **are** the decision head — zero new params |
+| **3. Post-train for the interface + calibration** | Training data & objective | Many question schemas, options described at request time; reward shaped around a proper scoring rule, not plain right/wrong |
+| **4. Self-distillation** | — | Model reasons with thinking on → that answer distribution becomes the *target* → same model, reasoning off, learns to match it at the first token. No gold labels |
+
+**This four-step shape is verified for SII-Decision** `[C p.60-62]`. Torchcast Decision 4B is built the same way on the same backbone family (Qwen3.5-4B) and calls itself "post-trained for typed decisions" — but it isn't in the audited literature, so treat its *exact* recipe as inferred, not confirmed, the way SII-Decision's is.
+
+<!--
+Full Say-this/Go-deeper version in doc/qa-prep.md Q6a. Receipts: freshly-initialized head
+lowered accuracy vs. keeping the LM head [C p.61; A p.8]; distillation recovers most of
+thinking's gain on weighing tasks, a quarter or less on exact computation [C p.63].
 -->
 
 ---
