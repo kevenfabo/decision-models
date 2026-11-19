@@ -17,14 +17,15 @@ Team Engineering & Research Initiative — Edition #1
 Welcome / framing: this is edition #1 of a new recurring team session.
 Note up front: "Jev" = TypeSafe AI's System 1 model, not JEPA.
 
-TOTAL ESTIMATE after the 2026-11-19 pass: ~62-67 min (31 presented slides + live
+TOTAL ESTIMATE after the 2026-11-19 pass: ~65-70 min (32 presented slides + live
 demo execution + open discussion). Originally approved budget was 45-60 min; the
-gap is the corpus fact-check depth, governance section, eval section, and the
-Qwen3.5-4B worked example added since approval -- all explicitly requested, kept
-intentionally rather than cut. 8 slides moved to the backup appendix (not
-presented) preserve everything trimmed from the main flow for Q&A. If still
-running long: cut "Why RL, and not just supervised training?" and/or cap
-Discussion at ~3 min.
+gap is the corpus fact-check depth, governance section, eval section, the
+Qwen3.5-4B worked example, and the restored Noul/Choice/Score usage-patterns
+slide (dropped in an earlier rewrite, re-added on request) -- all explicitly
+requested, kept intentionally rather than cut. 8 slides moved to the backup
+appendix (not presented) preserve everything trimmed from the main flow for
+Q&A. If still running long: cut "Why RL, and not just supervised training?"
+and/or cap Discussion at ~3 min.
 -->
 
 ---
@@ -121,7 +122,7 @@ input tokens → transformer stack → next-token distribution
 
 The output *is* a token sequence. "Deciding" is coaxed out of it via prompting.
 
-<!-- ~13-14 min for this section (7 slides) -->
+<!-- ~15-16 min for this section (8 slides, incl. the Noul/Choice/Score usage-patterns slide) -->
 
 ---
 
@@ -235,6 +236,30 @@ On **JEVal** (11k instances, 36 datasets): best open model **matches** Jev
 <!--
 [C p.52]: Jev 78.38 / ECE .053; SII-27B 79.24 / ECE .015; Laya 26.3; Nimble-9b 73.9.
 Torchcast numbers come from its own GitHub page, not from the corpus.
+-->
+
+---
+
+<!-- _class: dense -->
+
+## Usage patterns: every call is state + typed questions
+
+Same `/v1/systemone` shape across **every** Jev-like model, any backbone — `state`
+(text/JSON) + one or more `questions`, each declaring an answer shape:
+
+| Pattern | Shape | Our example |
+|---|---|---|
+| **Noul** | yes/no, calibrated probability pair | Entity resolution; decision-model-as-judge |
+| **Choice** | fixed option set, probabilities sum to 1 | News sentiment (negative/neutral/positive) |
+| **Score** | ordinal scale, full probability distribution across levels | *(not yet used)* — e.g. 1-5 risk severity |
+
+One call can carry **up to 10 questions against the same state** — e.g. "escalate:
+yes/no" + "which team: billing/technical/other" together, each answered **in isolation**.
+
+<!--
+[A p.2; F p.145]: Noul = TypeSafe's yes/no primitive, returns P(yes). Full field-level detail
+(Score returns expected level not just argmax, trained with ranked probability score) in the
+written doc Section 3 "Usage patterns" and demo/eval notebooks, which use exactly these three shapes.
 -->
 
 ---
