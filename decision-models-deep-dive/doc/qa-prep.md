@@ -198,6 +198,25 @@ Sources: `[A p.4–5; B p.40–41; C p.52; I p.186; K p.259]`.
 
 ---
 
+## Q6a. High level, how do you actually go from a base LLM (e.g. Qwen3.5-4B) to a decision model like Torchcast Decision?
+
+**Say this:** *"It's less 'new architecture' and more 'new training recipe plus a trick for reading the output,' layered on an unmodified base model. You take the pretrained LLM as-is, change how you read its output instead of what it is, then post-train it specifically to be good and calibrated at that interface -- often by distilling the model's own slow reasoning into a single fast readout step."*
+
+**Go deeper**, as a four-step walkthrough (verified against SII-Decision, the closest documented analog -- Torchcast itself isn't in the corpus, so treat its specific recipe as inferred, not confirmed):
+
+1. **Start from the plain pretrained LLM, untouched.** No new layers, no swapped-out head at this stage. Same transformer, same weights.
+2. **The readout trick -- change how you read the output, not the model.** Format the prompt so it ends right before the answer (`"...Options: (A)... (B)... (C)... The correct answer is ("`), do one forward pass, no generation loop, and restrict the next-token distribution to just the option-label tokens. That distribution *is* the typed decision. The output-embedding rows for "A"/"B"/"C" are literally the decision head -- zero new parameters needed for this part alone.
+3. **Post-train for the interface and for calibration, not just accuracy.** Raw zero-shot readout like step 2 is a documented *baseline*, not what makes a good decision model `[A p.8]`. Training does two things: teaches the request format (state + a question schema with options described at request time, across many tasks, not fixed at training time), and optimizes for calibration via a proper scoring rule instead of plain right/wrong -- the RLCD idea (see Q20).
+4. **The specific trick SII-Decision uses -- Reasoning-to-Readout Self-Distillation `[C p.60-62]`:** let the model reason with full chain-of-thought, take the answer distribution it lands on *at the end* of that reasoning as the target, then train the same model (reasoning off) to match that distribution at the very first answer token. No gold labels needed. It's literally training System 1 to imitate what System 2 would have concluded -- the exact metaphor the session opens with.
+
+**Receipts:**
+- Replacing the LM head with a freshly-initialized decision head *lowered* accuracy by several points in controlled tests; a dedicated typed head scored the same as just reading the ordinary LM head (.761 vs .761) `[C p.61; A p.8]`. The gain is the training objective, not architectural surgery.
+- Distillation recovers most of thinking's gain on label-selection/weighing tasks, but a quarter or less on exact-computation tasks (GPQA, MMLU-Pro) -- it transfers the weighing of options, not intermediate computation `[C p.63]`.
+
+**Watch out:** Torchcast Decision is described by its own docs as "post-trained for typed decisions" and almost certainly follows this general shape, but it doesn't appear in the audited literature `[A p.3]` -- don't present its specific recipe as verified the way SII-Decision's is.
+
+---
+
 ## Q7. What are typical architecture design examples?
 
 **Say this:** *"There are five model-level designs and three system-level patterns. At the model level, the most common is the **first-token readout** on a decoder LLM. The most principled is Softplan's **prefix-tree encoder with a block attention mask**, which gives you invariances by construction. At the system level, the patterns are confidence-gated cascades, hierarchical tree descent, and composing decisions through a rubric."*
